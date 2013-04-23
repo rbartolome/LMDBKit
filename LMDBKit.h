@@ -63,7 +63,7 @@
  */
 - (void)transactionWithParent: (LMDBTransaction *)parent readonly: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
 
-/** @brief Shows all active async transaction blocks.
+/** @brief Shows all active async transaction.
  *
  * @return The count of active async transactions
  */

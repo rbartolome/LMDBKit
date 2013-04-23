@@ -23,7 +23,7 @@ Definition
 	- readonly (blocks will execute in a concurrent queue)
 	- read/write (blocks will execute in a serial queue)
 - Open a non existing database in a readonly transaction will fail.
-
+- If a parent transaction is readonly the nested transaction must be readonly too.
 
 Workflow:
 --------
