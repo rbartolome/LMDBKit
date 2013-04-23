@@ -9,7 +9,7 @@ LMDBKit is Licensed under the [MIT License](http://opensource.org/licenses/mit-l
 
 LMDB Source is part of the OpenLDAP [Repository](git://git.openldap.org/openldap.git).
 
-Beside the LMDBKit source files you need the following files from liblmdb:  
+Beside the **LMDBKit** source files you need the following files from liblmdb:  
 
 		- midl.h  
 		- midl.c  
@@ -41,7 +41,7 @@ Otherwise you have to call `openEnvironmentWithMapSize:` or `openEnvironmentWith
 		[env openDatabaseNamed: @"my_new_database"];
 		
 
-**Manual Transaction handling**
+**Manual Transaction handling:**
 
 		LMDBTransaction *txn = [env beginTransactionWithParent: nil readonly: NO];
 		...
@@ -52,15 +52,15 @@ Otherwise you have to call `openEnvironmentWithMapSize:` or `openEnvironmentWith
 		[env commitTransaction: txn];
 		
 		
-**Block based Transaction handling**
+**Block based Transaction handling:**
 
 		[env transaction: ^(LMDBTransaction *txn, BOOL *rollback) {
     		...
     	}];
     	
-**Accessing the Database from a Transaction**
+**Accessing the Database from a Transaction:**
 
-After you a have a Transaction you can add, remove or search data.
+After you a have a Transaction you can add, remove and search data.
 
 		//This method returns a default LMDBI instance with name __default which will create by the Environment on startup
 		LMDBI *db = [txn db];
@@ -68,11 +68,9 @@ After you a have a Transaction you can add, remove or search data.
 		//This method will return a LMDBI instance with a given name. If you have a writable transaction the db will created if it doesn't exists.
 		LMDBI *db = [txn db: @"flower"];
 		
-You can no read and write to the database for example:
-
 		[db set: data_value key: data_key];
+		NSData *data = [db get: data_key];
 		
-Sorted Set Methods have a 's' prefix.
 		
 		
 		
@@ -85,6 +83,8 @@ Example:
         [env transaction: ^(LMDBTransaction *txn, BOOL *rollback) {
     		LMDBI *db = [txn db];
     		[db set: NSDataFromString(@"Birdy") key: NSDataFromString(@"key1")];
+    		
+    		//Sorted Set Methods have a 's' prefix.
             [db sadd: NSDataFromString(@"map value 1") key: NSDataFromString(@"mappy")];
         	[db sadd: NSDataFromString(@"map value 2") key: NSDataFromString(@"mappy")];
     	    [db sadd: NSDataFromString(@"map value 3") key: NSDataFromString(@"mappy")];
