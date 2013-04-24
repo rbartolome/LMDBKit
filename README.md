@@ -49,20 +49,24 @@ Otherwise you have to call `openEnvironmentWithMapSize:` or `openEnvironmentWith
 		 * If you want to rollback your changes or you have a readonly transaction you can call abort otherwise commit
 		 * [env abortTransaction: txn];
 		 **/
-		[env commitTransaction: txn];
+		[env commitTransaction: txn error: &error];
 		
 		
 **Block based Transaction handling:**
 
 		[env transaction: ^(LMDBTransaction *txn, BOOL *rollback) {
-    		...
-    	}];
+    				...
+    		  }
+      		  completion: ^(NSError *error) {
+        			NSLog(@"%@", error ? [error description] : @"No error on completion");
+        }];
     	
 **Accessing the Database from a Transaction:**
 
-After you a have a Transaction you can add, remove and search data.
+After you a have a Transaction you can add, remove and search data.  
+If a `set`, `del`, `sadd`, `sdel` or `srep` method returns `NO` you have to look at the error code in the transaction to check whats happened.
 
-		//This method returns a default LMDBI instance with name __default which will create by the Environment on startup
+		//This method returns a default LMDBI instance with name __default__ which will create by the Environment on startup
 		LMDBI *db = [txn db];
 		
 		//This method will return a LMDBI instance with a given name. If you have a writable transaction the db will created if it doesn't exists.
@@ -72,7 +76,16 @@ After you a have a Transaction you can add, remove and search data.
 		NSData *data = [db get: data_key];
 		
 		
-		
+**Transaction Errors:**
+
+		enum {
+		    LMDBKitErrorCodeUnknown = 0,
+    		LMDBKitErrorCodeDatabaseFull,
+    		LMDBKitErrorCodeTransactionFull,
+    		LMDBKitErrorCodeTransactionCommitFailedError,
+		    LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
+		};
+
 		
 Example:
 --------
@@ -81,25 +94,30 @@ Example:
                          					        startImmediately: YES];
                          					        
         [env transaction: ^(LMDBTransaction *txn, BOOL *rollback) {
-    		LMDBI *db = [txn db];
-    		[db set: NSDataFromString(@"Birdy") key: NSDataFromString(@"key1")];
-    		
-    		//Sorted Set Methods have a 's' prefix.
-            [db sadd: NSDataFromString(@"map value 1") key: NSDataFromString(@"mappy")];
-        	[db sadd: NSDataFromString(@"map value 2") key: NSDataFromString(@"mappy")];
-    	    [db sadd: NSDataFromString(@"map value 3") key: NSDataFromString(@"mappy")];
-	        [db sadd: NSDataFromString(@"map value 4") key: NSDataFromString(@"mappy")];
-	        
-	        //Enumerate keys in database
-	        [db enumerateKeysAndObjectsUsingBlock:^(NSData *data, NSData *key, NSInteger count, BOOL *stop) {
-            	NSLog(@"%@ :count %li: %@", NSStringFromData(key), (long)count, NSStringFromData(data));
-        	}];
-        
-        	//Enumerate values stored behinde a key
-			[db senumerateObjectsForKey: NSDataFromString(@"mappy")
-				 usingBlock:^(NSData *data, NSInteger index, BOOL *stop) {
-						NSLog(@"- mappy values :index %li: %@", (long)index, NSStringFromData(data));
-			}];
+					NSError *error = nil;
+					LMDBI *db = [txn db];
+					[db set: NSDataFromString(@"Birdy") key: NSDataFromString(@"key1") error: &error];
 			
-			*rollback = YES;
-    	}];
+					//Sorted Set Methods have a 's' prefix.
+					[db sadd: NSDataFromString(@"map value 1") key: NSDataFromString(@"mappy") error: &error];
+					[db sadd: NSDataFromString(@"map value 2") key: NSDataFromString(@"mappy") error: &error];
+					[db sadd: NSDataFromString(@"map value 3") key: NSDataFromString(@"mappy") error: &error];
+					[db sadd: NSDataFromString(@"map value 4") key: NSDataFromString(@"mappy") error: &error];
+			
+					//Enumerate keys in database
+					[db enumerateKeysAndObjectsUsingBlock:^(NSData *data, NSData *key, NSInteger count, BOOL *stop) {
+						NSLog(@"%@ :count %li: %@", NSStringFromData(key), (long)count, NSStringFromData(data));
+					}];
+		
+					//Enumerate values stored behinde a key
+					[db senumerateObjectsForKey: NSDataFromString(@"mappy")
+						 usingBlock:^(NSData *data, NSInteger index, BOOL *stop) {
+								NSLog(@"- mappy values :index %li: %@", (long)index, NSStringFromData(data));
+					}];
+			
+					*rollback = YES;
+    		  }
+      		  completion: ^(NSError *error) {
+        			NSLog(@"%@", error ? [error description] : @"No error on completion");
+        	  }
+        ];

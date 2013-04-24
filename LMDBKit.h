@@ -12,6 +12,18 @@
 
 @class LMDBTransaction, LMDBI;
 
+extern NSString *const LMDBKitErrorDomain;
+
+enum {
+    LMDBKitErrorCodeUnknown = 0,
+    LMDBKitErrorCodeDatabaseFull,
+    LMDBKitErrorCodeTransactionFull,
+    LMDBKitErrorCodeTransactionCommitFailedError,
+    LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
+};
+typedef NSInteger LMDBKitErrorCode;
+
+
 #pragma mark - Environment
 @interface LMDBEnvironment : NSObject
 
@@ -29,30 +41,32 @@
 - (BOOL)openDatabaseNamed: (NSString *)name;
 - (BOOL)openDatabaseNamed: (NSString *)name allowDuplicatedKeys: (BOOL)duplicatedKeys;
 
-- (void)dropDatabaseNamed: (NSString *)name;
-- (void)dropDatabaseNamed: (NSString *)name parentTransaction: (LMDBTransaction *)trans;
+- (BOOL)dropDatabaseNamed: (NSString *)name;
+- (BOOL)dropDatabaseNamed: (NSString *)name parentTransaction: (LMDBTransaction *)trans;
 
 #pragma mark Manual Transaction Handling
 - (LMDBTransaction *)beginTransaction;
 - (LMDBTransaction *)beginTransactionWithParent: (LMDBTransaction *)parent readonly: (BOOL)readonly;
 
-- (void)commitTransaction: (LMDBTransaction *)transaction;
+- (BOOL)commitTransaction: (LMDBTransaction *)transaction error: (NSError **)error;
 - (void)abortTransaction: (LMDBTransaction *)transaction;
 
 #pragma mark Background Transaction Handling
 /** @brief Creates a serial and writable Transaction.
  *
  * @param A block which gets called async
+ * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here
  */
-- (void)transaction: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
+- (void)transaction: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 
 /** @brief Creates a Transaction.
  *
  * A readonly transaction will be called concurrent while a writable transaction gets called in a serial way
  * @param readonly option
+ * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here
  * @param A block which gets called async
  */
-- (void)transaction: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
+- (void)transaction: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 
 /** @brief Creates a Transaction.
  *
@@ -60,8 +74,9 @@
  * @param a parent transaction. If a parent transaction is readonly the nested transaction will be readonly too
  * @param readonly option
  * @param A block which gets called async
+ * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here
  */
-- (void)transactionWithParent: (LMDBTransaction *)parent readonly: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
+- (void)transactionWithParent: (LMDBTransaction *)parent readonly: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 
 /** @brief Shows all active async transaction.
  *
@@ -79,6 +94,14 @@
 
 - (BOOL)readonly;
 - (LMDBEnvironment *)environment;
+
+/** @brief Returns a error
+ *
+ * It returns transaction and database related errors. If after you write to a database the error will find here
+ * @return nil if no error occures
+ */
+- (NSError *)error;
+- (void)resetError;
 
 /** @brief Returns the default database named __default__.
  *

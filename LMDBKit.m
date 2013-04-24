@@ -10,6 +10,8 @@
 
 #define kDefaultDatabaseName @"__default__"
 
+NSString *const LMDBKitErrorDomain = @"lmdb.kit";
+
 #pragma mark - Private Interfaces
 
 @interface _LMDBI : NSObject
@@ -39,11 +41,11 @@
 
 - (MDB_txn *)txn;
 
-- (BOOL)commit;
+- (int)commit;
 - (void)abort;
 
 - (void)reset;
-- (BOOL)renew;
+- (int)renew;
 
 @end
 
@@ -212,7 +214,8 @@
         {
             *created = YES;
             lmdbi = [self _openDatabaseNamed: _name allowDuplicatedKeys: dup parent: trans];
-            [_databases setObject: lmdbi forKey: _name];
+            if(lmdbi)
+                [_databases setObject: lmdbi forKey: _name];
         }
     });
 
@@ -239,13 +242,14 @@
     });
 }
 
-- (void)dropDatabaseNamed: (NSString *)name;
+- (BOOL)dropDatabaseNamed: (NSString *)name;
 {
-    [self dropDatabaseNamed: name parentTransaction: nil];
+    return [self dropDatabaseNamed: name parentTransaction: nil];
 }
 
-- (void)dropDatabaseNamed: (NSString *)name parentTransaction: (LMDBTransaction *)trans;
+- (BOOL)dropDatabaseNamed: (NSString *)name parentTransaction: (LMDBTransaction *)trans;
 {
+    __block BOOL result = YES;
     dispatch_sync(_databasesAccessQueue, ^{
         NSString *_name = kDefaultDatabaseName;
         
@@ -265,8 +269,10 @@
         
         [_databases removeObjectForKey: _name];
 
-        [self commitTransaction: txn];
+        result = [self commitTransaction: txn error: nil];
     });
+    
+    return result;
 }
 
 
@@ -284,13 +290,16 @@
     
     if(dbi)
     {
-        [txn commit];
+        result = [self commitTransaction: txn error: nil];
     }
     else
     {
-        [txn abort];
+        [self abortTransaction: txn];
         result = NO;
     }
+    
+    if(!result)
+        dbi = nil;
     
     return dbi;
 }
@@ -310,18 +319,26 @@
     return _transaction;
 }
 
-- (void)commitTransaction: (LMDBTransaction *)transaction;
+- (BOOL)commitTransaction: (LMDBTransaction *)transaction error: (NSError **)error;
 {
+    int rc = 0;
     if([transaction readonly])
     {
         [transaction abort];
     }
     else
     {
-        [transaction commit];
+        rc = [transaction commit];
+        
+        if(rc != 0 && error)
+        {
+            *error = [transaction error];
+        }
     }
     
     transaction = nil;
+    
+    return rc ? NO : YES;
 }
 
 - (void)abortTransaction: (LMDBTransaction *)transaction;
@@ -353,32 +370,44 @@
     });
 }
 
-- (void)transaction: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
+- (void)transaction: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 {
-    [self transactionWithParent: nil readonly: NO usingBlock: block];
+    [self transactionWithParent: nil readonly: NO usingBlock: block completion: completion];
 }
 
-- (void)transaction: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
+- (void)transaction: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 {
-    [self transactionWithParent: nil readonly: readonly usingBlock: block];
+    [self transactionWithParent: nil readonly: readonly usingBlock: block completion: completion];
 }
 
-- (void)transactionWithParent: (LMDBTransaction *)parent readonly: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block;
+- (void)transactionWithParent: (LMDBTransaction *)parent readonly: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 {
     [self incrActiveTransactions];
     dispatch_async(_processQueue, ^{
         LMDBTransaction *trans = [self beginTransactionWithParent: parent readonly: readonly];
+        
         BOOL roll = NO;
         
         block(trans, &roll);
         
         if(roll || readonly)
         {
-            [trans abort];
+            [self abortTransaction: trans];
+            completion(nil);
         }
         else
         {
-            [trans commit];
+            NSError *error = nil;
+            BOOL result = [self commitTransaction: trans error: &error];
+            
+            if(!result)
+            {
+                completion(error);
+            }
+            else
+            {
+                completion(nil);
+            }
         }
         
         trans = nil;
@@ -396,6 +425,7 @@
     LMDBEnvironment *_env;
     BOOL _readonly;
     MDB_txn *_txn;
+    NSError *_txn_error;
 }
 
 - (void)dealloc;
@@ -408,6 +438,7 @@
             [self commit];
     }
     
+    _txn_error = nil;
     _env = nil;
 }
 
@@ -430,6 +461,21 @@
     }
     
     return self;
+}
+
+- (NSError *)error;
+{
+    return _txn_error;
+}
+
+- (void)resetError;
+{
+    [self setError: nil];
+}
+
+- (void)setError: (NSError *)error;
+{
+    _txn_error = error;
 }
 
 - (LMDBI *)db;
@@ -462,11 +508,29 @@
     return _txn;
 }
 
-- (BOOL)commit;
+- (int)commit;
 {
     int rc = mdb_txn_commit([self txn]);
     _txn = NULL;
-    return rc ? NO : YES;
+    
+    if(rc)
+    {
+        if(_txn_error)
+        {
+            NSDictionary *userInfo = [_txn_error userInfo];
+            [self setError: [NSError errorWithDomain: LMDBKitErrorDomain
+                                                code: LMDBKitErrorCodeTransactionCommitFailedError
+                                            userInfo: userInfo]];
+        }
+        else
+        {
+            [self setError: [NSError errorWithDomain: LMDBKitErrorDomain
+                                                code: LMDBKitErrorCodeTransactionCommitFailedError
+                                            userInfo: [NSDictionary dictionaryWithObject: @"Transaction commit failed and did abort" forKey: NSLocalizedDescriptionKey]]];
+        }
+    }
+    
+    return rc;
 }
 
 - (void)abort;
@@ -480,10 +544,10 @@
     mdb_txn_reset([self txn]);
 }
 
-- (BOOL)renew;
+- (int)renew;
 {
     int rc = mdb_txn_renew([self txn]);
-    return rc ? NO : YES;
+    return rc;
 }
 
 @end
@@ -493,6 +557,7 @@
 
 @implementation _LMDBI
 {
+    NSString *_name;
     BOOL _allowDuplicatedKeys;
     MDB_dbi _dbi;
 }
@@ -501,6 +566,7 @@
 {
     if((self = [super init]))
     {
+        _name = name;
         _allowDuplicatedKeys = dup;
         int rc;
         if(_allowDuplicatedKeys)
@@ -515,6 +581,16 @@
     }
     
     return self;
+}
+
+- (void)dealloc;
+{
+    _name = nil;
+}
+
+- (NSString *)name;
+{
+    return _name;
 }
 
 - (BOOL)allowDuplicatedKeys;
@@ -623,7 +699,7 @@
     _key.mv_data = (void *)[key bytes];
     
     int rc = mdb_get([_txn txn], [_original dbi], &_key, &_data);
-    
+
     return rc ? NO : YES;
 }
 
@@ -648,6 +724,40 @@
         }
 
         rc = mdb_put([_txn txn], [_original dbi], &_key, &_data, 0);
+        
+        if(rc != 0)
+        {
+            switch (rc)
+            {
+                case MDB_MAP_FULL:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeDatabaseFull
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                     
+                    break;
+                }
+                case MDB_TXN_FULL:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeDatabaseFull
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                    break;
+                }
+                case EACCES:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
     }
 
     return rc ? NO : YES;
@@ -693,6 +803,40 @@
         _data.mv_data = (void *)[data bytes];
 
         rc = mdb_put([_txn txn], [_original dbi], &_key, &_data, 0);
+        
+        if(rc != 0)
+        {
+            switch (rc)
+            {
+                case MDB_MAP_FULL:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeDatabaseFull
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                    
+                    break;
+                }
+                case MDB_TXN_FULL:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeDatabaseFull
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                    break;
+                }
+                case EACCES:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
     }
 
     return rc ? NO : YES;
@@ -742,6 +886,23 @@
 
     int rc = mdb_del([_txn txn], [_original dbi], &_key, data ? &_data : NULL);
 
+    if(rc != 0)
+    {
+        switch (rc)
+        {
+            case EACCES:
+            {
+                NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                      code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
+                                                  userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                [_txn setError: aError];
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    
     return rc ? NO : YES;
 }
 
@@ -771,7 +932,7 @@
                 {
                     if(lindex == index)
                     {
-                        mdb_cursor_del(cursor, 0);
+                        rc = mdb_cursor_del(cursor, 0);
                         break;
                     }
                     lindex++;
@@ -779,6 +940,23 @@
             }
 
             mdb_cursor_close(cursor);
+        }
+        
+        if(rc != 0)
+        {
+            switch (rc)
+            {
+                case EACCES:
+                {
+                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                                                          code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
+                                                      userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
+                    [_txn setError: aError];
+                    break;
+                }
+                default:
+                    break;
+            }
         }
     }
 
