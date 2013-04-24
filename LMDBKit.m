@@ -127,7 +127,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
 - (BOOL)openEnvironmentWithMapSize: (int)size;
 {
-    return [self openEnvironmentWithMapSize: 1024 maximumNumberOfDatabases: 32];
+    return [self openEnvironmentWithMapSize: size maximumNumberOfDatabases: 32];
 }
 
 - (BOOL)openEnvironmentWithMapSize: (int)size maximumNumberOfDatabases: (int)maximumNumber;
@@ -720,7 +720,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
         if([_original allowDuplicatedKeys])
         {
-            rc = [self sdel: key data: nil];
+            [self sdel: key data: nil];
         }
 
         rc = mdb_put([_txn txn], [_original dbi], &_key, &_data, 0);
