@@ -121,3 +121,10 @@ Example:
         			NSLog(@"%@", error ? [error description] : @"No error on completion");
         	  }
         ];
+        
+
+ToDo:
+-----
+• Collect changed/added/deleted keys in a transaction and post a notification  
+• check for database size and prevent from getting full  
+• More error handling  
