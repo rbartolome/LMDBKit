@@ -7,12 +7,23 @@
 
 #import <Foundation/Foundation.h>
 
+@class LMDBTransaction, LMDBI;
+
+
 #define NSDataFromString(aString) [aString dataUsingEncoding: NSUTF8StringEncoding]
 #define NSStringFromData(data) [NSString stringWithUTF8String: [data bytes]]
 
-@class LMDBTransaction, LMDBI;
+/** @brief This Notification will post to the default center after a writable Transaction has commit with changes
+ *
+ * The userInfo dictionary of the notification contain the key kLMDBKitEnvironmentKey which contains the environment and kLMDBKitDatabasesKey which contains the databases name.
+ */
+extern NSString *const LMDBTransactionDidCommitUpdatesNotification;
 
-extern NSString *const LMDBKitErrorDomain;
+extern NSString *const kLMDBKitEnvironmentKey;
+extern NSString *const kLMDBKitDatabasesKey;
+
+extern NSString *const kLMDBKitDefaultDatabaseName;
+extern NSString *const kLMDBKitErrorDomain;
 
 enum {
     LMDBKitErrorCodeUnknown = 0,

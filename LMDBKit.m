@@ -8,9 +8,14 @@
 #import "LMDBKit.h"
 #import "lmdb.h"
 
-#define kDefaultDatabaseName @"__default__"
 
-NSString *const LMDBKitErrorDomain = @"lmdb.kit";
+NSString *const kLMDBKitDefaultDatabaseName = @"__default__";
+
+NSString *const kLMDBKitErrorDomain = @"lmdb.kit.error";
+NSString *const LMDBTransactionDidCommitUpdatesNotification = @"LMDBTransactionDidCommitUpdatesNotification";
+
+NSString *const kLMDBKitEnvironmentKey = @"kLMDBKitEnvironmentKey";
+NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
 
 #pragma mark - Private Interfaces
 
@@ -38,6 +43,8 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 {
 
 }
+
+- (void)_markChanges: (NSString *)dbName;
 
 - (MDB_txn *)txn;
 
@@ -142,7 +149,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         rc = mdb_env_open(_mdb_env, [_path UTF8String], 0, 0660);
         
         BOOL created = NO;
-        [self databaseNamed: kDefaultDatabaseName create: YES allowDuplicatedKeys: YES parentTransaction: nil created: &created];
+        [self databaseNamed: kLMDBKitDefaultDatabaseName create: YES allowDuplicatedKeys: YES parentTransaction: nil created: &created];
         
         result = rc ? NO : YES;
     }
@@ -170,7 +177,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
     if(_mdb_env)
     {
         dispatch_sync(_processQueue, ^() {
-            [self closeDatabaseNamed: kDefaultDatabaseName];
+            [self closeDatabaseNamed: kLMDBKitDefaultDatabaseName];
             
             NSArray *_names = [_databases allKeys];
             [_names enumerateObjectsUsingBlock:^(id obj, NSUInteger idx, BOOL *stop) {
@@ -203,7 +210,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
     __block _LMDBI *lmdbi = nil;
     
     dispatch_sync(_databasesAccessQueue, ^{
-        NSString *_name = kDefaultDatabaseName;
+        NSString *_name = kLMDBKitDefaultDatabaseName;
         
         if(name)
             _name = name;
@@ -226,7 +233,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 {
     dispatch_sync(_databasesAccessQueue, ^{
         
-        NSString *_name = kDefaultDatabaseName;
+        NSString *_name = kLMDBKitDefaultDatabaseName;
         
         if(name)
             _name = name;
@@ -251,7 +258,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 {
     __block BOOL result = YES;
     dispatch_sync(_databasesAccessQueue, ^{
-        NSString *_name = kDefaultDatabaseName;
+        NSString *_name = kLMDBKitDefaultDatabaseName;
         
         if(name)
             _name = name;
@@ -278,7 +285,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
 - (_LMDBI *)_openDatabaseNamed: (NSString *)name allowDuplicatedKeys: (BOOL)dup parent: (LMDBTransaction *)trans;
 {
-    NSString *_name = kDefaultDatabaseName;
+    NSString *_name = kLMDBKitDefaultDatabaseName;
     
     if(name)
         _name = name;
@@ -426,6 +433,8 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
     BOOL _readonly;
     MDB_txn *_txn;
     NSError *_txn_error;
+    
+    NSMutableSet *_databasesChanged;
 }
 
 - (void)dealloc;
@@ -440,6 +449,15 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
     
     _txn_error = nil;
     _env = nil;
+    _databasesChanged = nil;
+}
+
+- (void)_markChanges: (NSString *)dbName;
+{
+    if(!_databasesChanged)
+        _databasesChanged = [[NSMutableSet alloc] init];
+    
+    [_databasesChanged addObject: dbName];
 }
 
 - (id)initWithEnvironment: (LMDBEnvironment *)environment readonly: (BOOL)readonly parent: (LMDBTransaction *)parent;
@@ -458,6 +476,8 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         {
             return nil;
         }
+        
+        _databasesChanged = [[NSMutableSet alloc] init];
     }
     
     return self;
@@ -518,16 +538,23 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         if(_txn_error)
         {
             NSDictionary *userInfo = [_txn_error userInfo];
-            [self setError: [NSError errorWithDomain: LMDBKitErrorDomain
+            [self setError: [NSError errorWithDomain: kLMDBKitErrorDomain
                                                 code: LMDBKitErrorCodeTransactionCommitFailedError
                                             userInfo: userInfo]];
         }
         else
         {
-            [self setError: [NSError errorWithDomain: LMDBKitErrorDomain
+            [self setError: [NSError errorWithDomain: kLMDBKitErrorDomain
                                                 code: LMDBKitErrorCodeTransactionCommitFailedError
-                                            userInfo: [NSDictionary dictionaryWithObject: @"Transaction commit failed and did abort" forKey: NSLocalizedDescriptionKey]]];
+                                            userInfo: @{NSLocalizedDescriptionKey: @"Transaction commit failed and did abort"}]];
         }
+    }
+    else
+    {
+        if(_databasesChanged && [_databasesChanged count])
+            [[NSNotificationCenter defaultCenter] postNotificationName: LMDBTransactionDidCommitUpdatesNotification
+                                                                object: self
+                                                              userInfo: @{kLMDBKitEnvironmentKey: _env, kLMDBKitDatabasesKey: _databasesChanged}];        
     }
     
     return rc;
@@ -537,11 +564,15 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 {
     mdb_txn_abort([self txn]);
     _txn = NULL;
+    
+    _databasesChanged = nil;
 }
 
 - (void)reset;
 {
     mdb_txn_reset([self txn]);
+    
+    _databasesChanged = nil;
 }
 
 - (int)renew;
@@ -705,6 +736,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
 - (BOOL)set: (NSData *)data key: (NSData *)key;
 {
+    BOOL result = NO;
     int rc = 0;
 
     if(data)
@@ -731,7 +763,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
             {
                 case MDB_MAP_FULL:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -740,7 +772,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
                 }
                 case MDB_TXN_FULL:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -748,7 +780,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
                 }
                 case EACCES:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -760,7 +792,12 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         }
     }
 
-    return rc ? NO : YES;
+    result = rc ? NO : YES;
+    
+    if(result)
+        [_txn _markChanges: [_original name]];
+
+    return result;
 }
 
 
@@ -782,6 +819,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
 - (BOOL)del: (NSData *)key;
 {
+    [_txn _markChanges: [_original name]];
     return [self sdel: key data: nil];
 }
 
@@ -789,6 +827,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
 - (BOOL)sadd: (NSData *)data key: (NSData *)key;
 {
+    BOOL result = NO;
     int rc = 0;
 
     if(data)
@@ -810,7 +849,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
             {
                 case MDB_MAP_FULL:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -819,7 +858,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
                 }
                 case MDB_TXN_FULL:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -827,7 +866,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
                 }
                 case EACCES:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -839,7 +878,12 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         }
     }
 
-    return rc ? NO : YES;
+    result = rc ? NO : YES;
+    
+    if(result)
+        [_txn _markChanges: [_original name]];
+    
+    return result;
 }
 
 - (BOOL)srep: (NSData *)data key: (NSData *)key atIndex: (NSInteger)index;
@@ -849,6 +893,9 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
     if(result)
     {
         result = [self sadd: data key: key];
+        
+        if(result)
+            [_txn _markChanges: [_original name]];
     }
 
     return result;
@@ -860,6 +907,9 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
     if(result)
     {
         result = [self sadd: newData key: key];
+        
+        if(result)
+            [_txn _markChanges: [_original name]];
     }
 
     return result;
@@ -872,6 +922,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
 
 - (BOOL)sdel: (NSData *)key data: (NSData *)data;
 {
+    BOOL result = NO;
     MDB_val _key;
     MDB_val _data;
 
@@ -892,7 +943,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         {
             case EACCES:
             {
-                NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                       code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
                                                   userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                 [_txn setError: aError];
@@ -903,7 +954,12 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
         }
     }
     
-    return rc ? NO : YES;
+    result = rc ? NO : YES;
+
+    if(result)
+        [_txn _markChanges: [_original name]];
+
+    return result;
 }
 
 - (BOOL)sdel: (NSData *)key atIndex: (NSInteger)index;
@@ -948,7 +1004,7 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
             {
                 case EACCES:
                 {
-                    NSError *aError = [NSError errorWithDomain: LMDBKitErrorDomain
+                    NSError *aError = [NSError errorWithDomain: kLMDBKitErrorDomain
                                                           code: LMDBKitErrorCodeAttemptToWriteInReadOnlyTransaction
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
@@ -959,6 +1015,9 @@ NSString *const LMDBKitErrorDomain = @"lmdb.kit";
             }
         }
     }
+
+    if(result)
+        [_txn _markChanges: [_original name]];
 
     return result;
 }
