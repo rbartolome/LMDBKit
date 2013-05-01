@@ -5,8 +5,6 @@ LMDBKit is a Objective-C Wrapper for the [OpenLDAP Lightning Memory-Mapped Datab
 LMDB is Licensed under the [OpenLDAP, Public License](http://www.OpenLDAP.org/license.html).  
 LMDBKit is Licensed under the [MIT License](http://opensource.org/licenses/mit-license.php).
 
-**LMDBKit is 'Work In Progress' and not finally done.**
-
 LMDB Source is part of the OpenLDAP [Repository](git://git.openldap.org/openldap.git).
 
 Beside the **LMDBKit** source files you need the following files from liblmdb:  
@@ -125,19 +123,5 @@ Example:
 
 ToDo:
 -----
-• Collect changed/added/deleted keys in a transaction and post a notification  
-• check for database size and prevent from getting full.
- 
-        // http://www.openldap.org/lists/openldap-technical/201303/msg00145.html
-        // This didn't work but out, but why?
-        MDB_stat stat;
-        mdb_stat([_txn txn], [_original dbi], &stat);
-        MDB_envinfo info;
-        mdb_env_info([[_txn environment] env], &info);
-        
-        size_t max_pgno = info.me_mapsize/stat.ms_psize;
-        size_t last_pgno = info.me_last_pgno;
-        NSLog(@"%zi - %zi", last_pgno, max_pgno);
-        
-• More error handling  
+
 • Test on iOS

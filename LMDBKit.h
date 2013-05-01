@@ -13,14 +13,24 @@
 #define NSDataFromString(aString) [aString dataUsingEncoding: NSUTF8StringEncoding]
 #define NSStringFromData(data) [NSString stringWithUTF8String: [data bytes]]
 
+/** @brief This Notification will post to the default center after write to a database will fail because of the database size or transaction size is to small
+ *
+ * The userInfo dictionary of the notification contains the key kLMDBKitEnvironmentKey, kLMDBKitDatabaseNameKey and kLMDBKitErrorKey which contains the error with a LMDBKitErrorCode.
+ * This might be the same error you will get from a transaction after you've commit it.
+ */
+
+extern NSString *const LMDBDatabaseReachSizeLimitNotification;
+
 /** @brief This Notification will post to the default center after a writable Transaction has commit with changes
  *
- * The userInfo dictionary of the notification contain the key kLMDBKitEnvironmentKey which contains the environment and kLMDBKitDatabasesKey which contains the databases name.
+ * The userInfo dictionary of the notification contains the key kLMDBKitEnvironmentKey which value is the environment and kLMDBKitDatabaseNamesKey which value is the databases name used in the transaction.
  */
 extern NSString *const LMDBTransactionDidCommitUpdatesNotification;
 
 extern NSString *const kLMDBKitEnvironmentKey;
-extern NSString *const kLMDBKitDatabasesKey;
+extern NSString *const kLMDBKitDatabaseNameKey;
+extern NSString *const kLMDBKitErrorKey;
+extern NSString *const kLMDBKitDatabaseNamesKey;
 
 extern NSString *const kLMDBKitDefaultDatabaseName;
 extern NSString *const kLMDBKitErrorDomain;
@@ -66,7 +76,7 @@ typedef NSInteger LMDBKitErrorCode;
 /** @brief Creates a serial and writable Transaction.
  *
  * @param A block which gets called async
- * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here
+ * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here.
  */
 - (void)transaction: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
 
@@ -74,7 +84,7 @@ typedef NSInteger LMDBKitErrorCode;
  *
  * A readonly transaction will be called concurrent while a writable transaction gets called in a serial way
  * @param readonly option
- * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here
+ * @param completion block that might contain a error if the transaction failed to commit otherwise cleanup here.
  * @param A block which gets called async
  */
 - (void)transaction: (BOOL)readonly usingBlock: (void (^) (LMDBTransaction *txn, BOOL *rollback))block completion: (void (^) (NSError *error))completion;
@@ -170,5 +180,7 @@ typedef NSInteger LMDBKitErrorCode;
 - (NSData *)sgetfirst: (NSData *)key;
 
 - (BOOL)senumerateObjectsForKey: (NSData *)key usingBlock: (void (^) (NSData *data, NSInteger index, BOOL *stop))block;
+
+- (BOOL)isFull;
 
 @end

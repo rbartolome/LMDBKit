@@ -12,10 +12,15 @@
 NSString *const kLMDBKitDefaultDatabaseName = @"__default__";
 
 NSString *const kLMDBKitErrorDomain = @"lmdb.kit.error";
+
+NSString *const LMDBDatabaseReachSizeLimitNotification = @"LMDBDatabaseReachSizeLimitNotification";
+
 NSString *const LMDBTransactionDidCommitUpdatesNotification = @"LMDBTransactionDidCommitUpdatesNotification";
 
 NSString *const kLMDBKitEnvironmentKey = @"kLMDBKitEnvironmentKey";
-NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
+NSString *const kLMDBKitDatabaseNameKey = @"kLMDBKitDatabaseNameKey";
+NSString *const kLMDBKitErrorKey = @"kLMDBKitErrorKey";
+NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
 #pragma mark - Private Interfaces
 
@@ -554,7 +559,7 @@ NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
         if(_databasesChanged && [_databasesChanged count])
             [[NSNotificationCenter defaultCenter] postNotificationName: LMDBTransactionDidCommitUpdatesNotification
                                                                 object: self
-                                                              userInfo: @{kLMDBKitEnvironmentKey: _env, kLMDBKitDatabasesKey: _databasesChanged}];        
+                                                              userInfo: @{kLMDBKitEnvironmentKey: _env, kLMDBKitDatabaseNamesKey: _databasesChanged}];
     }
     
     return rc;
@@ -767,7 +772,10 @@ NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
-                     
+                    
+                    [[NSNotificationCenter defaultCenter] postNotificationName: LMDBDatabaseReachSizeLimitNotification
+                                                                        object: self
+                                                                      userInfo: @{kLMDBKitErrorKey: [_txn error], kLMDBKitEnvironmentKey: [_txn environment], kLMDBKitDatabaseNameKey: [_original name]}];
                     break;
                 }
                 case MDB_TXN_FULL:
@@ -776,6 +784,10 @@ NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
+                    
+                    [[NSNotificationCenter defaultCenter] postNotificationName: LMDBDatabaseReachSizeLimitNotification
+                                                                        object: self
+                                                                      userInfo: @{kLMDBKitErrorKey: [_txn error], kLMDBKitEnvironmentKey: [_txn environment], kLMDBKitDatabaseNameKey: [_original name]}];
                     break;
                 }
                 case EACCES:
@@ -854,6 +866,9 @@ NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
                     
+                    [[NSNotificationCenter defaultCenter] postNotificationName: LMDBDatabaseReachSizeLimitNotification
+                                                                        object: self
+                                                                      userInfo: @{kLMDBKitErrorKey: [_txn error], kLMDBKitEnvironmentKey: [_txn environment], kLMDBKitDatabaseNameKey: [_original name]}];
                     break;
                 }
                 case MDB_TXN_FULL:
@@ -862,6 +877,10 @@ NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
                                                           code: LMDBKitErrorCodeDatabaseFull
                                                       userInfo: [NSDictionary dictionaryWithObject: [NSString stringWithFormat: @"%s", mdb_strerror(rc)] forKey: NSLocalizedDescriptionKey]];
                     [_txn setError: aError];
+                    
+                    [[NSNotificationCenter defaultCenter] postNotificationName: LMDBDatabaseReachSizeLimitNotification
+                                                                        object: self
+                                                                      userInfo: @{kLMDBKitErrorKey: [_txn error], kLMDBKitEnvironmentKey: [_txn environment], kLMDBKitDatabaseNameKey: [_original name]}];
                     break;
                 }
                 case EACCES:
@@ -1304,6 +1323,20 @@ NSString *const kLMDBKitDatabasesKey = @"kLMDBKitDatabasesKey";
     mdb_cursor_close(cursor);
 
     return YES;
+}
+
+- (BOOL)isFull;
+{
+    MDB_stat stat;
+    mdb_stat([_txn txn], [_original dbi], &stat);
+    MDB_envinfo info;
+    mdb_env_info([[_txn environment] env], &info);
+    
+    size_t max_pgno = info.me_mapsize/stat.ms_psize;
+    size_t last_pgno = info.me_last_pgno;
+    NSLog(@"%zi - %zi", last_pgno, max_pgno);
+    
+    return last_pgno < max_pgno ? NO : YES;
 }
 
 @end
