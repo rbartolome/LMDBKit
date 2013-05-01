@@ -134,15 +134,15 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
 - (BOOL)openEnvironment;
 {
-    return [self openEnvironmentWithMapSize: 1024 maximumNumberOfDatabases: 32];
+    return [self openEnvironmentWithMaxMapSize: 1024 maximumNumberOfDatabases: 32];
 }
 
-- (BOOL)openEnvironmentWithMapSize: (int)size;
+- (BOOL)openEnvironmentWithMaxMapSize: (int)size;
 {
-    return [self openEnvironmentWithMapSize: size maximumNumberOfDatabases: 32];
+    return [self openEnvironmentWithMaxMapSize: size maximumNumberOfDatabases: 32];
 }
 
-- (BOOL)openEnvironmentWithMapSize: (int)size maximumNumberOfDatabases: (int)maximumNumber;
+- (BOOL)openEnvironmentWithMaxMapSize: (int)size maximumNumberOfDatabases: (int)maximumNumber;
 {
     BOOL result = YES;
     if(!_mdb_env)

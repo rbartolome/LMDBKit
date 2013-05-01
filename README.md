@@ -31,8 +31,8 @@ Workflow:
 	    LMDBEnvironment *env = [[LMDBEnvironment alloc] initWithPath: @"/path_to/my_lmdb"
                          					        startImmediately: YES];
                          					        
-If you create the Environment with `startImmediatly: YES` the default map size (1024) and maximum number of named databases (32) will be set as default.  
-Otherwise you have to call `openEnvironmentWithMapSize:` or `openEnvironmentWithMapSize:maximumNumberOfDatabases:` manually.
+If you create the Environment with `startImmediatly: YES` the default map size (1024 mb) and maximum number of named databases (32) will be set as default.
+Otherwise you have to call `openEnvironmentWithMaxMapSize:` or `openEnvironmentWithMaxMapSize:maximumNumberOfDatabases:` manually.
 
 **Create a Database outside of a Transaction:**
 

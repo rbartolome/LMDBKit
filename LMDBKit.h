@@ -48,12 +48,18 @@ typedef NSInteger LMDBKitErrorCode;
 #pragma mark - Environment
 @interface LMDBEnvironment : NSObject
 
+/** @brief Creates a environment at path.
+ *
+ * The environment file will be created beside a lock file at the given path.
+ * @param path to enviroment is a directory, otherwise it will be created.
+ * @param if NO, you have to open the enviroment manually otherwise it will create with a max db size of 1024 MB and 32 databases.
+ */
 - (id)initWithPath: (NSString *)path startImmediately: (BOOL)start;
 
 #pragma mark Environment Handling
 - (BOOL)openEnvironment;
-- (BOOL)openEnvironmentWithMapSize: (int)size;
-- (BOOL)openEnvironmentWithMapSize: (int)size maximumNumberOfDatabases: (int)maximumNumber;
+- (BOOL)openEnvironmentWithMaxMapSize: (int)size;
+- (BOOL)openEnvironmentWithMaxMapSize: (int)size maximumNumberOfDatabases: (int)maximumNumber;
 
 - (BOOL)copyEnvironmentToPath: (NSString *)path;
 - (void)closeEnvironment;
