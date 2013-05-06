@@ -7,6 +7,9 @@
 
 #import "LMDBKit.h"
 
+/* Choose between binary or xml format */
+#define kLMDBIBinaryPListFormat 1
+
 @interface LMDBI (NSPropertyListSerialization)
 
 #pragma mark - Setter Methods

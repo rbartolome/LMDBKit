@@ -19,7 +19,7 @@
     if(pList)
     {
         data = [NSPropertyListSerialization dataWithPropertyList: pList
-                                                          format: NSPropertyListBinaryFormat_v1_0
+                                                          format: kLMDBIBinaryPListFormat ? NSPropertyListBinaryFormat_v1_0 : NSPropertyListXMLFormat_v1_0
                                                          options: 0
                                                            error: &error];
     }
