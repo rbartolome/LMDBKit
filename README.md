@@ -17,6 +17,7 @@ Beside the **LMDBKit** source files you need the following files from liblmdb:
 Definition
 ----------
 - Keys and Values are of type NSData.
+	- You can create your own Categories for LMDBI like LMDBI+BinaryPropertyListSerialization
 - 2 types of Transactions are supported:
 	- readonly (blocks will execute in a concurrent queue)
 	- read/write (blocks will execute in a serial queue)
@@ -62,16 +63,16 @@ Otherwise you have to call `openEnvironmentWithMaxMapSize:` or `openEnvironmentW
 **Accessing the Database from a Transaction:**
 
 After you a have a Transaction you can add, remove and search data.  
-If a `set`, `del`, `sadd`, `sdel` or `srep` method returns `NO` you have to look at the error code in the transaction to check whats happened.
+If a modification method like `storeDataItem:forKey`, `removeDataItemForKey`, `addDataItem:toKey:` etc. return `NO` you have to look at the error code in the transaction to check whats happened.
 
 		//This method returns a default LMDBI instance with name __default__ which will create by the Environment on startup
-		LMDBI *db = [txn db];
+		LMDBI *db = [txn dbi];
 		
 		//This method will return a LMDBI instance with a given name. If you have a writable transaction the db will created if it doesn't exists.
-		LMDBI *db = [txn db: @"flower"];
+		LMDBI *db = [txn dbi: @"flower"];
 		
-		[db set: data_value key: data_key];
-		NSData *data = [db get: data_key];
+		[db storeDataItem: data_value forKey: data_key];
+		NSData *data = [db storedDataItemForKey: data_key];
 		
 		
 **Transaction Errors:**
@@ -93,22 +94,22 @@ Example:
                          					        
         [env transaction: ^(LMDBTransaction *txn, BOOL *rollback) {
 					NSError *error = nil;
-					LMDBI *db = [txn db];
-					[db set: NSDataFromString(@"Birdy") key: NSDataFromString(@"key1") error: &error];
+					LMDBI *db = [txn dbi];
+					[db storeDataItem: NSDataFromString(@"Birdy") forKey: NSDataFromString(@"key1")];
 			
 					//Sorted Set Methods have a 's' prefix.
-					[db sadd: NSDataFromString(@"map value 1") key: NSDataFromString(@"mappy") error: &error];
-					[db sadd: NSDataFromString(@"map value 2") key: NSDataFromString(@"mappy") error: &error];
-					[db sadd: NSDataFromString(@"map value 3") key: NSDataFromString(@"mappy") error: &error];
-					[db sadd: NSDataFromString(@"map value 4") key: NSDataFromString(@"mappy") error: &error];
+					[db addDataItem: NSDataFromString(@"map value 1") toKey: NSDataFromString(@"mappy")];
+					[db addDataItem: NSDataFromString(@"map value 2") toKey: NSDataFromString(@"mappy")];
+					[db addDataItem: NSDataFromString(@"map value 3") toKey: NSDataFromString(@"mappy")];
+					[db addDataItem: NSDataFromString(@"map value 4") toKey: NSDataFromString(@"mappy")];
 			
-					//Enumerate keys in database
-					[db enumerateKeysAndObjectsUsingBlock:^(NSData *data, NSData *key, NSInteger count, BOOL *stop) {
+					//enumerate keys in database
+					[db enumerateKeysAndDataItemsUsingBlock:^(NSData *data, NSData *key, NSInteger count, BOOL *stop) {
 						NSLog(@"%@ :count %li: %@", NSStringFromData(key), (long)count, NSStringFromData(data));
 					}];
 		
-					//Enumerate values stored behinde a key
-					[db senumerateObjectsForKey: NSDataFromString(@"mappy")
+					//enumerate values stored behinde a key
+					[db enumerateDataItemsForKey: NSDataFromString(@"mappy")
 						 usingBlock:^(NSData *data, NSInteger index, BOOL *stop) {
 								NSLog(@"- mappy values :index %li: %@", (long)index, NSStringFromData(data));
 					}];

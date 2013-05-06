@@ -9,9 +9,8 @@
 
 @class LMDBTransaction, LMDBI;
 
-
-#define NSDataFromString(aString) [aString dataUsingEncoding: NSUTF8StringEncoding]
-#define NSStringFromData(data) [NSString stringWithUTF8String: [data bytes]]
+#define NSDataFromString(aString) aString ? [aString dataUsingEncoding: NSUTF8StringEncoding] : nil
+#define NSStringFromData(data) data ? [NSString stringWithUTF8String: [data bytes]] : nil
 
 /** @brief This Notification will post to the default center after write to a database will fail because of the database size or transaction size is to small
  *
@@ -135,7 +134,7 @@ typedef NSInteger LMDBKitErrorCode;
  * The default database will create on environment startup
  * @return The LMBDI Proxy database instance __default__
  */
-- (LMDBI *)db;
+- (LMDBI *)dbi;
 
 /** @brief Returns a databse with given name
  *
@@ -143,50 +142,50 @@ typedef NSInteger LMDBKitErrorCode;
  * @param The database name
  * @return a LMBDI Proxy database instance
  */
-- (LMDBI *)db: (NSString *)name;
+- (LMDBI *)dbi: (NSString *)name;
 
 @end
 
 #pragma mark - Database
 @interface LMDBI : NSProxy
 
+- (BOOL)isFull;
+
 #pragma mark Default Key/Value Handling
-- (NSInteger)count;
-- (BOOL)exists: (NSData *)key;
+- (NSInteger)keysCount;
+- (BOOL)storedKeyExists: (NSData *)key;
 
-- (BOOL)set: (NSData *)data key: (NSData *)key;
-- (NSData *)get: (NSData *)key;
-- (BOOL)del: (NSData *)key;
+- (BOOL)storeDataItem: (NSData *)data forKey: (NSData *)key;
+- (NSData *)storedDataItemForKey: (NSData *)key;
+- (BOOL)removeDataItemForKey: (NSData *)key;
 
-- (BOOL)enumerateKeysAndObjectsUsingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
-- (BOOL)enumerateKeysAndObjectsStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateKeysAndDataItemsUsingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateKeysAndDataItemsStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
 
-- (BOOL)enumerateKeysUsingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
-- (BOOL)enumerateKeysStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateKeysOnlyUsingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumarteKeysOnlyStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
 
-- (BOOL)enumerateObjectsUsingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
-- (BOOL)enumerateObjectStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateDataItemsOnlyUsingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateDataItemsOnlyStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
 
 
 #pragma mark Sorted Set Handling
-- (NSInteger)scount: (NSData *)key;
+- (NSInteger)dataItemsCountForKey: (NSData *)key;
 
-- (BOOL)sadd: (NSData *)data key: (NSData *)key;
+- (BOOL)addDataItem: (NSData *)data toKey: (NSData *)key;
 
-- (BOOL)srep: (NSData *)data key: (NSData *)key atIndex: (NSInteger)index;
-- (BOOL)srep: (NSData *)data withData: (NSData *)newData key: (NSData *)key;
+- (BOOL)replaceDataItem: (NSData *)data forKey: (NSData *)key atIndex: (NSInteger)index;
+- (BOOL)replaceDataItem: (NSData *)data withDataItem: (NSData *)newData forKey: (NSData *)key;
 
-- (BOOL)sdel: (NSData *)key;
-- (BOOL)sdel: (NSData *)key data: (NSData *)data;
-- (BOOL)sdel: (NSData *)key atIndex: (NSInteger)index;
+- (BOOL)removeDataItemsForKey: (NSData *)key;
+- (BOOL)removeDataItem: (NSData *)data forKey: (NSData *)key;
+- (BOOL)removeDataItemForKey: (NSData *)key atIndex: (NSInteger)index;
 
-- (NSArray *)sget: (NSData *)key;
-- (NSData *)sget: (NSData *)key atIndex: (NSInteger)index;
-- (NSData *)sgetlast: (NSData *)key;
-- (NSData *)sgetfirst: (NSData *)key;
+- (NSArray *)dataItemsForKey: (NSData *)key;
+- (NSData *)dataItemForKey: (NSData *)key atIndex: (NSInteger)index;
+- (NSData *)lastDataItemForKey: (NSData *)key;
+- (NSData *)firstDataItemForKey: (NSData *)key;
 
-- (BOOL)senumerateObjectsForKey: (NSData *)key usingBlock: (void (^) (NSData *data, NSInteger index, BOOL *stop))block;
-
-- (BOOL)isFull;
+- (BOOL)enumerateDataItemsForKey: (NSData *)key usingBlock: (void (^) (NSData *data, NSInteger index, BOOL *stop))block;
 
 @end

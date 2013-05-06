@@ -503,12 +503,12 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     _txn_error = error;
 }
 
-- (LMDBI *)db;
+- (LMDBI *)dbi;
 {
-    return [self db: nil];
+    return [self dbi: nil];
 }
 
-- (LMDBI *)db: (NSString *)name;
+- (LMDBI *)dbi: (NSString *)name;
 {
     BOOL created = NO;
     _LMDBI *dbi = [_env databaseNamed: name create: !_readonly allowDuplicatedKeys: YES parentTransaction: self created: &created];
@@ -598,7 +598,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     MDB_dbi _dbi;
 }
 
-- (id)initDBIWithName: (NSString *)name allowDuplicatedKeys: (BOOL)dup transaction: (LMDBTransaction *)transaction;
+- (instancetype)initDBIWithName: (NSString *)name allowDuplicatedKeys: (BOOL)dup transaction: (LMDBTransaction *)transaction;
 {
     if((self = [super init]))
     {
@@ -665,12 +665,12 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     _txn = nil;
 }
 
-+ (id)dbWithTransaction: (LMDBTransaction *)txn original: (_LMDBI *)db;
++ (instancetype)dbWithTransaction: (LMDBTransaction *)txn original: (_LMDBI *)db;
 {
-    return [[LMDBI alloc] initWithTransaction: txn original: db];
+    return [[[self class] alloc] initWithTransaction: txn original: db];
 }
 
-- (id)initWithTransaction: (LMDBTransaction *)txn original: (_LMDBI *)db;
+- (instancetype)initWithTransaction: (LMDBTransaction *)txn original: (_LMDBI *)db;
 {
     _original = db;
     _txn = txn;
@@ -705,9 +705,23 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
+- (BOOL)isFull;
+{
+    MDB_stat stat;
+    mdb_stat([_txn txn], [_original dbi], &stat);
+    MDB_envinfo info;
+    mdb_env_info([[_txn environment] env], &info);
+    
+    size_t max_pgno = info.me_mapsize/stat.ms_psize;
+    size_t last_pgno = info.me_last_pgno;
+    NSLog(@"%zi - %zi", last_pgno, max_pgno);
+    
+    return last_pgno < max_pgno ? NO : YES;
+}
+
 #pragma mark Single Values Operations
 
-- (NSInteger)count;
+- (NSInteger)keysCount;
 {
     MDB_stat stat;
     NSInteger count = 0;
@@ -726,7 +740,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return count;
 }
 
-- (BOOL)exists: (NSData *)key;
+- (BOOL)storedKeyExists: (NSData *)key;
 {
     MDB_val _key;
     MDB_val _data;
@@ -739,7 +753,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return rc ? NO : YES;
 }
 
-- (BOOL)set: (NSData *)data key: (NSData *)key;
+- (BOOL)storeDataItem: (NSData *)data forKey: (NSData *)key;
 {
     BOOL result = NO;
     int rc = 0;
@@ -757,7 +771,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
         if([_original allowDuplicatedKeys])
         {
-            [self sdel: key data: nil];
+            [self removeDataItem: key forKey: nil];
         }
 
         rc = mdb_put([_txn txn], [_original dbi], &_key, &_data, 0);
@@ -813,7 +827,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 }
 
 
-- (NSData *)get: (NSData *)key;
+- (NSData *)storedDataItemForKey: (NSData *)key;
 {
     MDB_val _key;
     MDB_val _data;
@@ -829,15 +843,15 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return [NSData dataWithBytes: _data.mv_data length: _data.mv_size];
 }
 
-- (BOOL)del: (NSData *)key;
+- (BOOL)removeDataItemForKey: (NSData *)key;
 {
     [_txn _markChanges: [_original name]];
-    return [self sdel: key data: nil];
+    return [self removeDataItem: key forKey: nil];
 }
 
 #pragma mark Duplicate Values Operations
 
-- (BOOL)sadd: (NSData *)data key: (NSData *)key;
+- (BOOL)addDataItem: (NSData *)data toKey: (NSData *)key;
 {
     BOOL result = NO;
     int rc = 0;
@@ -905,13 +919,13 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (BOOL)srep: (NSData *)data key: (NSData *)key atIndex: (NSInteger)index;
+- (BOOL)replaceDataItem: (NSData *)data forKey: (NSData *)key atIndex: (NSInteger)index;
 {
-    BOOL result = [self sdel: key atIndex: index];
+    BOOL result = [self removeDataItemForKey: key atIndex: index];
 
     if(result)
     {
-        result = [self sadd: data key: key];
+        result = [self addDataItem: data toKey: key];
         
         if(result)
             [_txn _markChanges: [_original name]];
@@ -920,12 +934,12 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (BOOL)srep: (NSData *)data withData: (NSData *)newData key: (NSData *)key;
+- (BOOL)replaceDataItem: (NSData *)data withDataItem: (NSData *)newData forKey: (NSData *)key;
 {
-    BOOL result = [self sdel: key data: data];
+    BOOL result = [self removeDataItem: key forKey: data];
     if(result)
     {
-        result = [self sadd: newData key: key];
+        result = [self addDataItem: newData toKey: key];
         
         if(result)
             [_txn _markChanges: [_original name]];
@@ -934,12 +948,12 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (BOOL)sdel: (NSData *)key;
+- (BOOL)removeDataItemsForKey: (NSData *)key;
 {
-    return [self sdel: key data: nil];
+    return [self removeDataItem: key forKey: nil];
 }
 
-- (BOOL)sdel: (NSData *)key data: (NSData *)data;
+- (BOOL)removeDataItem: (NSData *)data forKey: (NSData *)key;
 {
     BOOL result = NO;
     MDB_val _key;
@@ -981,7 +995,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (BOOL)sdel: (NSData *)key atIndex: (NSInteger)index;
+- (BOOL)removeDataItemForKey: (NSData *)key atIndex: (NSInteger)index;
 {
     BOOL result = NO;
     if([_original allowDuplicatedKeys])
@@ -1041,7 +1055,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (NSInteger)scount: (NSData *)key;
+- (NSInteger)dataItemsCountForKey: (NSData *)key;
 {
     NSInteger result = 0;
     MDB_cursor *cursor;
@@ -1071,11 +1085,11 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return rc == 0 ? result : 0;
 }
 
-- (NSArray *)sget: (NSData *)key;
+- (NSArray *)dataItemsForKey: (NSData *)key;
 {
     __block NSMutableArray *result = [[NSMutableArray alloc] init];
 
-    [self senumerateObjectsForKey: key
+    [self enumerateDataItemsForKey: key
                       usingBlock:^(NSData *data, NSInteger index, BOOL *stop) {
                           [result addObject: data];
                       }];
@@ -1083,10 +1097,10 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (NSData *)sget: (NSData *)key atIndex: (NSInteger)index;
+- (NSData *)dataItemForKey: (NSData *)key atIndex: (NSInteger)index;
 {
     __block NSData *result = nil;
-    [self senumerateObjectsForKey: key
+    [self enumerateDataItemsForKey: key
                       usingBlock:^(NSData *data, NSInteger lindex, BOOL *stop) {
                           if(lindex == index)
                           {
@@ -1098,7 +1112,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return result;
 }
 
-- (NSData *)sgetlast: (NSData *)key;
+- (NSData *)lastDataItemForKey: (NSData *)key;
 {
     NSData *result = nil;
 
@@ -1133,7 +1147,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return  result;
 }
 
-- (NSData *)sgetfirst: (NSData *)key;
+- (NSData *)firstDataItemForKey: (NSData *)key;
 {
     NSData *result = nil;
 
@@ -1163,7 +1177,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return  result;
 }
 
-- (BOOL)senumerateObjectsForKey: (NSData *)key usingBlock: (void (^) (NSData *data, NSInteger index, BOOL *stop))block;
+- (BOOL)enumerateDataItemsForKey: (NSData *)key usingBlock: (void (^) (NSData *data, NSInteger index, BOOL *stop))block;
 {
     BOOL result = NO;
 
@@ -1206,7 +1220,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 }
 
 #pragma mark Enumerate Keys and Objects
-- (BOOL)enumerateKeysAndObjectsUsingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateKeysAndDataItemsUsingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
 {
     return [self _enumerateStartAtKey: nil returnKey: YES returnData: YES usingBlock: block];
 }
@@ -1216,7 +1230,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     return [self _enumerateStartAtKey: nil returnKey: YES returnData: YES usingBlock: block];
 }
 
-- (BOOL)enumerateKeysAndObjectsStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateKeysAndDataItemsStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSData *key, NSInteger count, BOOL *stop))block;
 {
     return [self _enumerateStartAtKey: startKey returnKey: YES returnData: YES usingBlock: block];
 }
@@ -1227,29 +1241,29 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 }
 
 #pragma mark Enumerate Keys
-- (BOOL)enumerateKeysUsingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateKeysOnlyUsingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
 {
-    return [self _enumerateStartAtKey: nil returnKey: YES returnData: NO usingBlock:^(NSData *idata, NSData *ikey, NSInteger icount, BOOL *istop) {
+    return [self _enumerateStartAtKey: nil returnKey: YES returnData: NO usingBlock: ^(NSData *idata, NSData *ikey, NSInteger icount, BOOL *istop) {
         block(ikey, icount, istop);
     }];
 }
 
-- (BOOL)enumerateKeysStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
+- (BOOL)enumarteKeysOnlyStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *key, NSInteger count, BOOL *stop))block;
 {
-    return [self _enumerateStartAtKey: startKey returnKey: YES returnData: NO usingBlock:^(NSData *idata, NSData *ikey, NSInteger icount, BOOL *istop) {
+    return [self _enumerateStartAtKey: startKey returnKey: YES returnData: NO usingBlock: ^(NSData *idata, NSData *ikey, NSInteger icount, BOOL *istop) {
         block(ikey, icount, istop);
     }];
 }
 
 #pragma mark Enumerate Objects
-- (BOOL)enumerateObjectsUsingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateDataItemsOnlyUsingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
 {
     return [self _enumerateStartAtKey: nil returnKey: NO returnData: YES usingBlock:^(NSData *idata, NSData *ikey, NSInteger icount, BOOL *istop) {
         block(idata, icount, istop);
     }];
 }
 
-- (BOOL)enumerateObjectStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
+- (BOOL)enumerateDataItemsOnlyStartWithKey: (NSData *)startKey usingBlock: (void (^) (NSData *data, NSInteger count, BOOL *stop))block;
 {
     return [self _enumerateStartAtKey: startKey returnKey: NO returnData: YES usingBlock:^(NSData *idata, NSData *ikey, NSInteger icount, BOOL *istop) {
         block(idata, icount, istop);
@@ -1312,7 +1326,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
         NSInteger countResult = 0;
 
         if(next_op == MDB_NEXT_NODUP)
-            countResult = [self scount: keyResult];
+            countResult = [self dataItemsCountForKey: keyResult];
 
         block(dataResult, keyResult, countResult, &stop);
 
@@ -1323,20 +1337,6 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     mdb_cursor_close(cursor);
 
     return YES;
-}
-
-- (BOOL)isFull;
-{
-    MDB_stat stat;
-    mdb_stat([_txn txn], [_original dbi], &stat);
-    MDB_envinfo info;
-    mdb_env_info([[_txn environment] env], &info);
-    
-    size_t max_pgno = info.me_mapsize/stat.ms_psize;
-    size_t last_pgno = info.me_last_pgno;
-    NSLog(@"%zi - %zi", last_pgno, max_pgno);
-    
-    return last_pgno < max_pgno ? NO : YES;
 }
 
 @end
