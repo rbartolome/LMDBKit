@@ -1,15 +1,15 @@
 //
-//  LMDBIPList+BinaryPropertyListSerialization.m
+//  LMDBI+NSPropertyListSerialization.m
 //
 //  Created by Raphael Bartolome on 06.05.13.
 //  Copyright (c) 2013 Raphael Bartolome. All rights reserved.
 //
 
-#import "LMDBI+BinaryPropertyListSerialization.h"
+#import "LMDBI+NSPropertyListSerialization.h"
 
-@implementation LMDBI (BinaryPropertyListSerialization)
+@implementation LMDBI (NSPropertyListSerialization)
 
-#pragma mark - Private serialize methods
+#pragma mark - Private serialization methods
 
 - (NSData *)_dataFromPropertyList: (id)pList;
 {

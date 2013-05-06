@@ -1,5 +1,5 @@
 //
-//  LMDBI+BinaryPropertyListSerialization.h
+//  LMDBI+NSPropertyListSerialization.h
 //
 //  Created by Raphael Bartolome on 06.05.13.
 //  Copyright (c) 2013 Raphael Bartolome. All rights reserved.
@@ -7,7 +7,7 @@
 
 #import "LMDBKit.h"
 
-@interface LMDBI (BinaryPropertyListSerialization)
+@interface LMDBI (NSPropertyListSerialization)
 
 #pragma mark - Setter Methods
 - (BOOL)setObject: (id)object forKey: (NSString *)aKey;
