@@ -840,7 +840,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     if(rc == MDB_NOTFOUND)
         return nil;
 
-    return [NSData dataWithBytes: _data.mv_data length: _data.mv_size];
+    return [NSData dataWithBytesNoCopy: _data.mv_data length: _data.mv_size freeWhenDone: NO];
 }
 
 - (BOOL)removeDataItemForKey: (NSData *)key;
@@ -1136,7 +1136,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
                 if(rc == 0)
                 {
-                    result = [NSData dataWithBytes: _data.mv_data length: _data.mv_size];
+                    result = [NSData dataWithBytesNoCopy: _data.mv_data length: _data.mv_size freeWhenDone: NO];
                 }
             }
 
@@ -1167,7 +1167,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
             if(rc == 0)
             {
-                result = [NSData dataWithBytes: _data.mv_data length: _data.mv_size];
+                result = [NSData dataWithBytesNoCopy: _data.mv_data length: _data.mv_size freeWhenDone: NO];
             }
 
             mdb_cursor_close(cursor);
@@ -1203,7 +1203,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
                 do
                 {
-                    NSData *dataResult = [NSData dataWithBytes: _data.mv_data length: _data.mv_size];
+                    NSData *dataResult = [NSData dataWithBytesNoCopy: _data.mv_data length: _data.mv_size freeWhenDone: NO];
                     block(dataResult, index, &stop);
                     index++;
 
@@ -1321,8 +1321,8 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
     do
     {
-        NSData *dataResult = rData ? [NSData dataWithBytes: _data.mv_data length: _data.mv_size] : nil;
-        NSData *keyResult = rKey ? [NSData dataWithBytes: _key.mv_data length: _key.mv_size] : nil;
+        NSData *dataResult = rData ? [NSData dataWithBytesNoCopy: _data.mv_data length: _data.mv_size freeWhenDone: NO] : nil;
+        NSData *keyResult = rKey ? [NSData dataWithBytesNoCopy: _key.mv_data length: _key.mv_size freeWhenDone: NO] : nil;
         NSInteger countResult = 0;
 
         if(next_op == MDB_NEXT_NODUP)
