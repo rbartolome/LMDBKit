@@ -17,7 +17,7 @@ Beside the **LMDBKit** source files you need the following files from liblmdb:
 Definition
 ----------
 - Keys and Values are of type NSData.
-	- You can create your own Categories for LMDBI like LMDBI+BinaryPropertyListSerialization
+	- You can create your own Categories for LMDBI like LMDBI+NSPropertyListSerialization
 - 2 types of Transactions are supported:
 	- readonly (blocks will execute in a concurrent queue)
 	- read/write (blocks will execute in a serial queue)
