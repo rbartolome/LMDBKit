@@ -97,7 +97,7 @@ Example:
 					LMDBI *db = [txn dbi];
 					[db storeDataItem: NSDataFromString(@"Birdy") forKey: NSDataFromString(@"key1")];
 			
-					//Sorted Set Methods have a 's' prefix.
+					//add items to a sorted set.
 					[db addDataItem: NSDataFromString(@"map value 1") toKey: NSDataFromString(@"mappy")];
 					[db addDataItem: NSDataFromString(@"map value 2") toKey: NSDataFromString(@"mappy")];
 					[db addDataItem: NSDataFromString(@"map value 3") toKey: NSDataFromString(@"mappy")];
