@@ -714,7 +714,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
     
     size_t max_pgno = info.me_mapsize/stat.ms_psize;
     size_t last_pgno = info.me_last_pgno;
-    NSLog(@"%zi - %zi", last_pgno, max_pgno);
+//    NSLog(@"%zi - %zi", last_pgno, max_pgno);
     
     return last_pgno < max_pgno ? NO : YES;
 }
@@ -846,7 +846,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 - (BOOL)removeDataItemForKey: (NSData *)key;
 {
     [_txn _markChanges: [_original name]];
-    return [self removeDataItem: key forKey: nil];
+    return [self removeDataItem: nil forKey: key];
 }
 
 #pragma mark Duplicate Values Operations
@@ -950,7 +950,7 @@ NSString *const kLMDBKitDatabaseNamesKey = @"kLMDBKitDatabasesNameKey";
 
 - (BOOL)removeDataItemsForKey: (NSData *)key;
 {
-    return [self removeDataItem: key forKey: nil];
+    return [self removeDataItem: nil forKey: key];
 }
 
 - (BOOL)removeDataItem: (NSData *)data forKey: (NSData *)key;
